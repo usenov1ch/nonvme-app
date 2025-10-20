@@ -1,0 +1,78 @@
+# === Node / Next.js ===
+node_modules/
+.next/
+out/
+dist/
+build/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === Environment files ===
+.env
+.env.*
+!.env.example
+.env.local
+
+# === System files ===
+.DS_Store
+Thumbs.db
+
+# === IDEs ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Logs ===
+logs/
+*.log
+*.csv
+
+# === TypeScript ===
+*.tsbuildinfo
+
+# === Coverage / Testing ===
+coverage/
+.nyc_output/
+
+# === Public / Static Artifacts ===
+public/uploads/
+public/tmp/
+static/
+
+# === Python (для Telegram бота) ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.egg-info/
+venv/
+.venv/
+env/
+ENV/
+bot/__pycache__/
+bot/.env
+
+# === Executables ===
+*.exe
+*.bat
+*.out
+
+# === OS specific ===
+ehthumbs.db
+Desktop.ini
+
+# === Next telemetry ===
+.next/trace
+.next/static/
+
+# === Misc ===
+*.zip
+*.tar
+*.tar.gz
+*.tgz
