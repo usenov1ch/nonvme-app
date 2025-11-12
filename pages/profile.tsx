@@ -2,15 +2,30 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import BottomNav from '../components/BottomNav'
 import CreatePollForm from '../components/CreatePollForm'
+import TopicSelector from '../components/TopicSelector'
+import AdminNewsForm from '../components/AdminNewsForm'
+
+declare global { interface Window { Telegram?: any } }
 
 export default function ProfilePage() {
   const [user, setUser] = useState<{ nonvme: string; registered_at: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // tg id + флаг админа
+  const [tgId, setTgId] = useState<string>('')
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // получаем Telegram ID на клиенте
   useEffect(() => {
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user
-    const userId = tgUser?.id
+    const u = (typeof window !== 'undefined') ? window.Telegram?.WebApp?.initDataUnsafe?.user : null
+    if (u?.id) setTgId(String(u.id))
+  }, [])
+
+  // грузим профиль пользователя
+  useEffect(() => {
+    const u = (typeof window !== 'undefined') ? window.Telegram?.WebApp?.initDataUnsafe?.user : null
+    const userId = u?.id
 
     if (!userId) {
       setError('Ошибка: Telegram ID не найден.')
@@ -30,12 +45,24 @@ export default function ProfilePage() {
       } else {
         setUser(data)
       }
-
       setLoading(false)
     }
 
     fetchProfile()
   }, [])
+
+  // проверяем, является ли пользователь админом основой ленты
+  useEffect(() => {
+    if (!tgId) return
+    ;(async () => {
+      const { data } = await supabase
+        .from('admin_publishers')
+        .select('telegram_id')
+        .eq('telegram_id', tgId)
+        .maybeSingle()
+      setIsAdmin(!!data)
+    })()
+  }, [tgId])
 
   return (
     <div style={{
@@ -72,6 +99,7 @@ export default function ProfilePage() {
           textAlign: 'center',
           border: '1px solid #333',
           boxShadow: '0 0 20px rgba(255,255,255,0.05)',
+          marginBottom: 16
         }}>
           <div style={{
             width: 72,
@@ -87,7 +115,7 @@ export default function ProfilePage() {
             color: '#aaa',
             border: '2px solid #444',
           }}>
-            {user.nonvme[0].toUpperCase()}
+            {user.nonvme?.[0]?.toUpperCase() || 'U'}
           </div>
 
           <div style={{ fontSize: 20, fontWeight: 600 }}>{user.nonvme}</div>
@@ -108,10 +136,24 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <CreatePollForm />
-        
+      {/* Настройка персональной ленты (темы) */}
+      <div style={{ width: '100%', maxWidth: 520, marginBottom: 16 }}>
+        <TopicSelector title="Моя лента: темы" />
+      </div>
+
+      {/* Обычная публикация пользователя (в пользовательскую ленту) */}
+      <div style={{ width: '100%', maxWidth: 520, marginBottom: 16 }}>
+        <CreatePollForm />
+      </div>
+
+      {/* Админская форма публикации в ОСНОВНУЮ ленту — видна только админам */}
+      {isAdmin && tgId && (
+        <div style={{ width: '100%', maxWidth: 520, marginBottom: 16 }}>
+          <AdminNewsForm tgId={tgId} />
+        </div>
+      )}
+
       <div style={{ marginTop: 'auto' }}>
-        
         <BottomNav />
       </div>
     </div>

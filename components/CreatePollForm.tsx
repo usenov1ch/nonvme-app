@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
+
+type Topic = { id: string; code: string; title: string; position?: number }
 
 export default function CreatePollForm() {
   const [title, setTitle] = useState('')
@@ -9,7 +11,32 @@ export default function CreatePollForm() {
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('') // <-- выбрана ли тема
+
   const router = useRouter()
+
+  // === Загрузка тем из справочника ===
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('topics')
+        .select('id, code, title, position')
+        .order('position', { ascending: true })
+        .order('title', { ascending: true })
+
+      if (!cancelled) {
+        if (error) {
+          console.error('[topics] load error:', error)
+          setTopics([])
+        } else {
+          setTopics(data ?? [])
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const handleOptionChange = (value: string, index: number) => {
     const next = [...options]
@@ -23,19 +50,29 @@ export default function CreatePollForm() {
   const handleSubmit = async () => {
     try {
       setError('')
+
+      // Валидация формы
       const trimmedTitle = title.trim()
       const trimmedQuestion = question.trim()
       const trimmedOptions = options.map(o => o.trim()).filter(Boolean)
+
       if (!trimmedTitle || !trimmedQuestion || trimmedOptions.length < 2) {
         setError('Введите заголовок, вопрос и минимум 2 варианта')
         return
       }
+      if (!selectedTopicId) {
+        setError('Выберите тему публикации')
+        return
+      }
 
       setLoading(true)
+
+      // Telegram user
       const tgUser = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user
       const author_id = tgUser?.id
-      if (!author_id) throw new Error('Telegram ID не найден')
+      if (!author_id) throw new Error('Telegram ID не найден (откройте из бота)')
 
+      // Медиа (если есть)
       let media_url: string | null = null
       if (file) {
         const fileExt = file.name.split('.').pop()
@@ -46,19 +83,27 @@ export default function CreatePollForm() {
         media_url = data.publicUrl
       }
 
+      // Вставка поста с topic_id
       const { data: poll, error: pollError } = await supabase
         .from('polls')
-        .insert([{ author_id, title: trimmedTitle, question: trimmedQuestion, media_url }])
+        .insert([{
+          author_id,
+          title: trimmedTitle,
+          question: trimmedQuestion,
+          media_url,
+          topic_id: selectedTopicId,     // <<=== обязательное поле темы
+        }])
         .select()
         .single()
       if (pollError) throw pollError
 
+      // Варианты ответа
       const pollOptions = trimmedOptions.map(text => ({ poll_id: poll.id, text }))
       const { error: optionError } = await supabase.from('poll_options').insert(pollOptions)
       if (optionError) throw optionError
 
       alert('Публикация/опрос создан!')
-      setTitle(''); setQuestion(''); setOptions(['','']); setFile(null)
+      setTitle(''); setQuestion(''); setOptions(['', '']); setFile(null); setSelectedTopicId('')
       router.push('/feed')
     } catch (e: any) {
       console.error('[Ошибка создания опроса]', e)
@@ -72,14 +117,32 @@ export default function CreatePollForm() {
     <div style={{ marginTop: 24 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Создать публикацию</h2>
 
+      {/* Тема (обязательная) */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 6 }}>Тема публикации *</div>
+        <select
+          value={selectedTopicId}
+          onChange={(e) => setSelectedTopicId(e.target.value)}
+          style={{
+            width:'95%', padding:10, background:'#111', color:'#fff',
+            borderRadius:10, border: `1px solid ${!selectedTopicId && error ? '#f44336' : '#333'}`
+          }}
+        >
+          <option value="">— выберите тему —</option>
+          {topics.map(t => (
+            <option key={t.id} value={t.id}>{t.title}</option>
+          ))}
+        </select>
+      </div>
+
       <input
         type="text" placeholder="Заголовок..." value={title} onChange={(e) => setTitle(e.target.value)}
-        style={{ width:'100%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12 }}
+        style={{ width:'95%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12 }}
       />
 
       <textarea
         placeholder="Введите вопрос/текст..." value={question} onChange={(e) => setQuestion(e.target.value)} rows={3}
-        style={{ width:'100%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12, resize:'vertical' }}
+        style={{ width:'95%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12, resize:'vertical' }}
       />
 
       <div style={{ marginBottom: 12 }}>
