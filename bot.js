@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api')
 const axios = require('axios')
 
 const BOT_TOKEN = '5911256257:AAGnqJG6f71Ye2_ecbSgdjJUeJjHlagAUWA'
-const WEB_APP_URL = 'https://6f0011d922cb.ngrok-free.app/register'
+const WEB_APP_URL = 'https://a798b5bf6fe7.ngrok-free.app/register'
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true })
 
