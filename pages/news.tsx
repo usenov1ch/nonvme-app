@@ -142,14 +142,24 @@ export default function NewsPage() {
         try {
           const hasRpc = typeof (supabase as any).rpc === 'function'
           if (hasRpc) {
-            const { data: countsData, error: countsErr } = await supabase.rpc('get_main_news_option_counts', { news_ids: newsIds })
+            const { data: countsData, error: countsErr } = await supabase.rpc(
+              'get_main_news_option_counts',
+              { news_ids: newsIds }
+            )
             if (countsErr) {
               console.warn('RPC get_main_news_option_counts error', countsErr)
               throw countsErr
             }
-            if (countsData && Array.isArray(countsData)) {
-              (countsData as any[]).forEach(row => {
-                if (row && row.option_id != null) countsMap[String(row.option_id)] = Number(row.votes ?? 0)
+
+            if (Array.isArray(countsData)) {
+              // явно типизируем ожидаемый формат результата
+              type CountRow = { option_id?: number | string; votes?: number | string }
+              ;(countsData as CountRow[]).forEach(row => {
+                const optionId = row?.option_id
+                if (optionId != null) {
+                  // гарантируем число и строковый ключ
+                  countsMap[String(optionId)] = Number(row.votes ?? 0)
+                }
               })
             }
           } else {
@@ -208,10 +218,11 @@ export default function NewsPage() {
           if (q) {
             const { data: myVotesData, error: myVotesErr } = await q
             if (!myVotesErr && myVotesData) {
-              const map: Record<string,string|null> = {}
-              (myVotesData ?? []).forEach((r: any) => {
-                if (r.main_news_id) map[r.main_news_id] = r.option_id ?? null
-              })
+              const map: Record<string,string|null> = {};
+              const votesArray = myVotesData ?? [];
+              votesArray.forEach((r: any) => {
+                if (r.main_news_id) map[r.main_news_id] = r.option_id ?? null;
+              });
               if (!canceled) setMyVotes(prev => ({ ...prev, ...map }))
             }
           }
@@ -233,18 +244,20 @@ export default function NewsPage() {
   // helper: fetch counts for a news post and update optionsMap
   const fetchAndSetCounts = async (newsId: string) => {
     try {
-      const { data: countsData, error: countsErr } = await supabase
+      const qCounts: any = supabase
         .from('main_news_votes')
         .select('option_id, count()', { count: 'exact' })
         .eq('main_news_id', newsId)
-        .group('option_id')
+
+      const { data: countsData, error: countsErr } = await qCounts.group('option_id')
 
       if (countsErr) {
         console.warn('[fetchAndSetCounts] error', countsErr)
         return
       }
-      const countsMap: Record<string, number> = {}
-      (countsData ?? []).forEach((r: any) => { countsMap[r.option_id] = Number(r.count) })
+      const countsMap: Record<string, number> = {};
+      const countsArray = countsData ?? [];
+      countsArray.forEach((r: any) => { countsMap[r.option_id] = Number(r.count); });
 
       setOptionsMap(prev => {
         const next = { ...prev }
@@ -312,22 +325,28 @@ export default function NewsPage() {
         else payload.anonymous_id = anonymous_id
 
         const onConflictCols = telegram_id ? ['main_news_id','telegram_id'] : ['main_news_id','anonymous_id']
+        const onConflictParam = Array.isArray(onConflictCols) ? onConflictCols.join(',') : (onConflictCols as string | undefined)
+
         const { error: upsertErr } = await supabase
           .from('main_news_votes')
-          .upsert([payload], { onConflict: onConflictCols })
+          .upsert([payload], onConflictParam ? { onConflict: onConflictParam } : undefined)
           .select()
+
         if (upsertErr) throw upsertErr
       }
 
       // fetch canonical counts
-      const { data: countsData } = await supabase
+      const qCounts: any = supabase
         .from('main_news_votes')
         .select('option_id, count()', { count: 'exact' })
         .eq('main_news_id', newsId)
-        .group('option_id')
 
-      const countsMap: Record<string, number> = {}
-      (countsData ?? []).forEach((r: any) => { countsMap[r.option_id] = Number(r.count) })
+      const { data: countsData, error: countsErr } = await qCounts.group('option_id')
+
+      const countsMap: Record<string, number> = {};
+      const countsArray = countsData ?? [];
+      countsArray.forEach((r: any) => { countsMap[r.option_id] = Number(r.count); });
+
 
       // fetch canonical myVote for this identity
       let myVote: string | null = null

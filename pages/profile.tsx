@@ -6,7 +6,7 @@ import CreatePollForm from '../components/CreatePollForm'
 import TopicSelector from '../components/TopicSelector'
 import AdminNewsForm from '../components/AdminNewsForm'
 
-declare global { interface Window { Telegram?: any } }
+/* declare global { interface Window { Telegram?: any } } */
 
 type UserRow = {
   id?: string

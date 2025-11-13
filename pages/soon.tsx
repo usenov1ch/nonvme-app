@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import ActivityBlockCard from '../components/ActivityBlockCard'
 import BottomNav from '../components/BottomNav'
 
-declare global { interface Window { Telegram?: any } }
+/* declare global { interface Window { Telegram?: any } } */
 
 type Block = {
   id: string

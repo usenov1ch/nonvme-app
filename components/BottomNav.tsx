@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
 
-declare global { interface Window { Telegram?: any; requestIdleCallback?: any } }
-
 const ICONS = [
   { path: '/news', key: 'home', json: '/icons/Home_lottie.json' },
   { path: '/feed', key: 'feed', json: '/icons/Bottom_Navigation_lottie.json' },
@@ -43,7 +41,8 @@ export default function BottomNav() {
   const hasLoadedRef = useRef<Record<string, boolean>>({})
 
   useEffect(() => {
-    const u = (typeof window !== 'undefined') ? window.Telegram?.WebApp?.initDataUnsafe?.user : null
+    const win = typeof window !== 'undefined' ? (window as any) : null
+    const u = win?.Telegram?.WebApp?.initDataUnsafe?.user ?? null
     if (u?.id) setTgId(String(u.id))
   }, [])
 
@@ -182,8 +181,9 @@ export default function BottomNav() {
       } else {
         // defer to idle to avoid blocking
         const doLoad = () => void createAnim(ic.key, ic.json)
-        if (typeof (window as any).requestIdleCallback === 'function') {
-          (window as any).requestIdleCallback(doLoad, { timeout: 1000 })
+        const win = typeof window !== 'undefined' ? (window as any) : null
+        if (win && typeof win.requestIdleCallback === 'function') {
+          win.requestIdleCallback(doLoad, { timeout: 1000 })
         } else {
           // fallback: small timeout
           setTimeout(doLoad, 700)

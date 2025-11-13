@@ -7,7 +7,7 @@ import CommentSection from '../components/CommentSection'
 import PostCard, { PollOption } from '../components/PostCard';
 import { logDebug } from '../lib/debug'
 
-declare global { interface Window { Telegram?: any } }
+/* declare global { interface Window { Telegram?: any } } */
 
 type Poll = {
   id: string
@@ -204,10 +204,11 @@ export default function FeedPage() {
               if (myVotesError) {
                 console.warn('Failed to load my votes', myVotesError)
               } else {
-                const myMap: Record<string, string | null> = {}
-                (myVotesData ?? []).forEach((r: any) => {
-                  if (r.poll_id) myMap[r.poll_id] = r.option_id ?? null
-                })
+                const myMap: Record<string, string | null> = {};
+                const votesArray = myVotesData ?? [];
+                votesArray.forEach((r: any) => {
+                  if (r.poll_id) myMap[r.poll_id] = r.option_id ?? null;
+                });
                 if (!cancel) setMyVotes(prev => ({ ...prev, ...myMap }))
               }
             }
@@ -235,11 +236,13 @@ export default function FeedPage() {
   // Helper: fetch aggregated counts for a poll and update optionsMap
   const fetchAndSetCounts = async (postId: string) => {
     try {
-      const { data: countsData, error: countsError } = await supabase
+      // Приводим промежуточную цепочку к any, чтобы TS не ругался на .group()
+      const q: any = supabase
         .from('poll_votes')
         .select('option_id, count()', { count: 'exact' })
         .eq('poll_id', postId)
-        .group('option_id')
+
+      const { data: countsData, error: countsError } = await q.group('option_id')
 
       if (countsError) {
         console.warn('[fetchAndSetCounts] error', countsError)
@@ -247,7 +250,7 @@ export default function FeedPage() {
       }
 
       const countsMap: Record<string, number> = {}
-      (countsData ?? []).forEach((r: any) => { countsMap[r.option_id] = Number(r.count) })
+      ;(countsData ?? []).forEach((r: any) => { countsMap[r.option_id] = Number(r.count) })
 
       setOptionsMap(prev => {
         const next = { ...prev }
@@ -260,6 +263,7 @@ export default function FeedPage() {
       console.error('[fetchAndSetCounts] unexpected', e)
     }
   }
+
 
   /**
    * handleVote:
@@ -327,27 +331,32 @@ export default function FeedPage() {
         const { data: delData, error: delError } = await delQuery.select();
         if (delError) throw delError;
       } else {
-        const payload: any = { poll_id: postId, option_id: optionId };
-        if (telegram_id) payload.telegram_id = telegram_id;
-        else payload.anonymous_id = anonymous_id;
+          const payload: any = { poll_id: postId, option_id: optionId };
+          if (telegram_id) payload.telegram_id = telegram_id;
+          else payload.anonymous_id = anonymous_id;
 
-        const onConflictCols = telegram_id ? ['poll_id','telegram_id'] : ['poll_id','anonymous_id'];
+          const onConflictCols = telegram_id ? ['poll_id','telegram_id'] : ['poll_id','anonymous_id'];
 
-        const { data: upsertData, error: upsertError } = await supabase
-          .from('poll_votes')
-          .upsert([payload], { onConflict: onConflictCols })
-          .select();
+          // Supabase ожидает onConflict как строку "col1,col2"
+          const onConflictParam = Array.isArray(onConflictCols) ? onConflictCols.join(',') : (onConflictCols as string | undefined);
 
-        if (upsertError) throw upsertError;
-      }
+          const { data: upsertData, error: upsertError } = await supabase
+            .from('poll_votes')
+            .upsert([payload], onConflictParam ? { onConflict: onConflictParam } : undefined)
+            .select();
+
+          if (upsertError) throw upsertError;
+        }
+
 
       // --- IMMEDIATE authoritative fetches (important) ---
       // 1) canonical counts for this poll
-      const { data: countsData, error: countsError } = await supabase
+      const qCounts: any = supabase
         .from('poll_votes')
         .select('option_id, count()', { count: 'exact' })
-        .eq('poll_id', postId)
-        .group('option_id');
+        .eq('poll_id', postId);
+
+      const { data: countsData, error: countsError } = await qCounts.group('option_id');
 
       if (countsError) {
         console.warn('[handleVote] counts fetch error', countsError);

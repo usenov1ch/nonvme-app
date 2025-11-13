@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import BottomNav from '../components/BottomNav'
 import { useRouter } from 'next/router'
 
-declare global { interface Window { Telegram?: any } }
+/* declare global { interface Window { Telegram?: any } } */
 
 type ChatRow = {
   id: string
@@ -50,9 +50,8 @@ async function resolveAvatarUrlIfNeeded(raw: string | null | undefined) {
   if (/^https?:\/\//i.test(raw)) return raw
   try {
     // предположим bucket называется 'avatars' — поправь, если у тебя другое имя
-    const { publicURL } = supabase.storage.from('avatars').getPublicUrl(raw)
-    // getPublicUrl синхронный - возвращает { publicURL }
-    return publicURL || null
+    const { data } = supabase.storage.from('avatars').getPublicUrl(raw)
+    return data?.publicUrl ?? null
   } catch (e) {
     // в случае ошибки — логируем и возвращаем null
     console.error('resolveAvatarUrlIfNeeded error', e)

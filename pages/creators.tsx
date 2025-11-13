@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import BottomNav from '../components/BottomNav'
 
-declare global { interface Window { Telegram?: any } }
+/* declare global { interface Window { Telegram?: any } } */
 
 type Channel = {
   id: string
@@ -123,7 +123,27 @@ function CreatorHubPage() {
           .limit(200)
         if (error) throw error
 
-        const base = (data as CPost[]) ?? []
+        // ---------- НОРМАЛИЗАЦИЯ DATA в CPost[] ----------
+        const raw = (data ?? []) as any[]
+
+        const base: CPost[] = raw.map((item: any) => {
+          const chRaw = item.channel
+          const ch = Array.isArray(chRaw) ? chRaw[0] : chRaw
+
+          return {
+            id: String(item.id ?? ''),
+            channel_id: String(item.channel_id ?? ''),
+            telegram_id: String(item.telegram_id ?? ''),
+            content: item.content ?? '',
+            media_url: item.media_url ?? null,
+            created_at: item.created_at ?? null,
+            channel: {
+              title: String(ch?.title ?? '')
+            }
+          } as CPost
+        })
+        // -------------------------------------------------
+
         const tgs = Array.from(new Set(base.map(p => String(p.telegram_id)))).filter(Boolean)
 
         let nameMap: Record<string, string | null> = {}
@@ -150,6 +170,7 @@ function CreatorHubPage() {
     })()
     return () => { cancel = true }
   }, [eligible])
+
 
   const createChannel = async () => {
     if (!tgId || !eligible) return
@@ -218,7 +239,26 @@ function CreatorHubPage() {
         .maybeSingle()
       nonvme = uRow?.nonvme ?? null
 
-      setPosts(prev => [{ ...(data as CPost), users: { nonvme } }, ...prev])
+      // Нормализуем ответ (data) в форму CPost
+      const rawObj = Array.isArray(data) ? data[0] : data // если вдруг data приходит массивом
+      const rp: any = rawObj ?? {}
+
+      const chRaw = rp.channel
+      const ch = Array.isArray(chRaw) ? chRaw[0] : chRaw
+
+      const normalizedPost: CPost = {
+        id: String(rp.id ?? ''),
+        channel_id: String(rp.channel_id ?? ''),
+        telegram_id: String(rp.telegram_id ?? ''),
+        content: rp.content ?? '',
+        media_url: rp.media_url ?? null,
+        created_at: rp.created_at ?? null,
+        channel: { title: String(ch?.title ?? '') }
+      }
+
+      // Добавляем пользователя и пушим в стейт
+      setPosts(prev => [{ ...normalizedPost, users: { nonvme } }, ...prev])
+
       setNewPost(''); setNewFile(null)
     } catch (e: any) {
       setErr(e?.message || 'Ошибка публикации')
