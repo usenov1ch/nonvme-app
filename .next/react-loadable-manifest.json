@@ -1,4 +1,10 @@
 {
+  "..\\components\\BottomNav.tsx -> lottie-web": {
+    "id": "..\\components\\BottomNav.tsx -> lottie-web",
+    "files": [
+      "static/chunks/node_modules_lottie-web_build_player_lottie_js.js"
+    ]
+  },
   "..\\node_modules\\@supabase\\auth-js\\dist\\module\\lib\\helpers.js -> @supabase/node-fetch": {
     "id": "..\\node_modules\\@supabase\\auth-js\\dist\\module\\lib\\helpers.js -> @supabase/node-fetch",
     "files": []

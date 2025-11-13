@@ -1,3 +1,4 @@
+// components/CreatePollForm.tsx
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
@@ -32,6 +33,9 @@ export default function CreatePollForm() {
           setTopics([])
         } else {
           setTopics(data ?? [])
+          if (!selectedTopicId && data && data.length) {
+            setSelectedTopicId(data[0].id)
+          }
         }
       }
     })()
@@ -75,12 +79,12 @@ export default function CreatePollForm() {
       // Медиа (если есть)
       let media_url: string | null = null
       if (file) {
-        const fileExt = file.name.split('.').pop()
+        const fileExt = (file.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase()
         const filePath = `polls/${Date.now()}.${fileExt}`
         const { error: uploadError } = await supabase.storage.from('media').upload(filePath, file)
         if (uploadError) throw uploadError
-        const { data } = supabase.storage.from('media').getPublicUrl(filePath)
-        media_url = data.publicUrl
+        const { data } = supabase.storage.from('media').getPublicUrl(filePath) as any
+        media_url = data?.publicUrl ?? data?.publicURL ?? null
       }
 
       // Вставка поста с topic_id
@@ -102,7 +106,7 @@ export default function CreatePollForm() {
       const { error: optionError } = await supabase.from('poll_options').insert(pollOptions)
       if (optionError) throw optionError
 
-      alert('Публикация/опрос создан!')
+      // Успех
       setTitle(''); setQuestion(''); setOptions(['', '']); setFile(null); setSelectedTopicId('')
       router.push('/feed')
     } catch (e: any) {
@@ -113,20 +117,41 @@ export default function CreatePollForm() {
     }
   }
 
+  // UI styles mirror AdminNewsForm — neutral dark with subtle focus
+  const inputBase: React.CSSProperties = {
+    width: '100%',
+    padding: 12,
+    background: '#0f0f10',
+    color: '#fff',
+    borderRadius: 10,
+    border: '1px solid rgba(255,255,255,0.04)',
+    marginBottom: 12,
+    fontSize: 14,
+    outline: 'none',
+    boxShadow: '0 1px 0 rgba(0,0,0,0.6) inset'
+  }
+
+  const smallLabel: React.CSSProperties = { fontSize: 12, color: '#aaa', marginBottom: 6 }
+
   return (
-    <div style={{ marginTop: 24 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Создать публикацию</h2>
+    <div style={{ background: '#0b0b0c', borderRadius: 14, padding: 14, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)' }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px 0' }}>Создать публикацию</h2>
 
       {/* Тема (обязательная) */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 6 }}>Тема публикации *</div>
+        <div style={smallLabel}>Тема публикации *</div>
         <select
           value={selectedTopicId}
           onChange={(e) => setSelectedTopicId(e.target.value)}
           style={{
-            width:'95%', padding:10, background:'#111', color:'#fff',
-            borderRadius:10, border: `1px solid ${!selectedTopicId && error ? '#f44336' : '#333'}`
+            ...inputBase,
+            padding: 10,
+            height: 44,
+            width: '100%',
+            border: `1px solid ${!selectedTopicId && error ? '#f44336' : 'rgba(255,255,255,0.04)'}`
           }}
+          onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 4px rgba(124,92,255,0.06)')}
+          onBlur={(e) => (e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.6) inset')}
         >
           <option value="">— выберите тему —</option>
           {topics.map(t => (
@@ -137,12 +162,16 @@ export default function CreatePollForm() {
 
       <input
         type="text" placeholder="Заголовок..." value={title} onChange={(e) => setTitle(e.target.value)}
-        style={{ width:'95%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12 }}
+        style={{ ...inputBase }}
+        onFocus={(e)=> (e.currentTarget.style.boxShadow = '0 0 0 4px rgba(124,92,255,0.06)')}
+        onBlur={(e)=> (e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.6) inset')}
       />
 
       <textarea
         placeholder="Введите вопрос/текст..." value={question} onChange={(e) => setQuestion(e.target.value)} rows={3}
-        style={{ width:'95%', padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333', marginBottom:12, resize:'vertical' }}
+        style={{ ...inputBase, resize: 'vertical', minHeight: 80 }}
+        onFocus={(e)=> (e.currentTarget.style.boxShadow = '0 0 0 4px rgba(124,92,255,0.06)')}
+        onBlur={(e)=> (e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.6) inset')}
       />
 
       <div style={{ marginBottom: 12 }}>
@@ -151,33 +180,78 @@ export default function CreatePollForm() {
           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <input
               type="text" placeholder={`Вариант ${i + 1}`} value={opt} onChange={(e) => handleOptionChange(e.target.value, i)}
-              style={{ flex:1, padding:10, background:'#111', color:'#fff', borderRadius:10, border:'1px solid #333' }}
+              style={{ flex:1, padding:10, background:'#0f0f10', color:'#fff', borderRadius:10, border:'1px solid rgba(255,255,255,0.04)' }}
             />
             {options.length > 2 && (
               <button onClick={() => removeOption(i)}
-                style={{ width:36, height:36, borderRadius:8, background:'#2b2b2b', color:'#fff', border:'1px solid #444', cursor:'pointer' }}
+                style={{ width:36, height:36, borderRadius:8, background:'#2b2b2b', color:'#fff', border:'1px solid rgba(255,255,255,0.04)', cursor:'pointer' }}
                 aria-label="Удалить вариант"
+                type="button"
               >✕</button>
             )}
           </div>
         ))}
         {options.length < 10 && (
           <button onClick={addOption}
-            style={{ padding:'8px 12px', borderRadius:10, background:'transparent', color:'#fff', border:'1px dashed #555', cursor:'pointer' }}
+            style={{ padding:'8px 12px', borderRadius:10, background:'transparent', color:'#fff', border:'1px dashed rgba(255,255,255,0.06)', cursor:'pointer' }}
+            type="button"
           >+ Добавить вариант</button>
         )}
       </div>
 
-      <div style={{ marginBottom: 12 }}>
-        <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <label style={{
+          display:'inline-flex',
+          alignItems:'center',
+          gap:10,
+          padding:'8px 12px',
+          borderRadius:8,
+          background:'#0e0e10',
+          border:'1px solid rgba(255,255,255,0.04)',
+          color:'#fff',
+          cursor:'pointer',
+          fontSize:13,
+          userSelect:'none'
+        }}>
+          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ display:'none' }} />
+          Выбор файла
+        </label>
+        <div style={{ color:'#bdbdbd', fontSize:13 }}>
+          {file ? file.name : 'Не выбран ни один файл'}
+        </div>
       </div>
 
-      {error && <p style={{ color: 'red', marginBottom: 8 }}>{error}</p>}
+      {error && <div style={{ color:'#ff7b7b', marginBottom: 10 }}>{error}</div>}
 
-      <button onClick={handleSubmit} disabled={loading}
-        style={{ padding:'10px 20px', borderRadius:999, border:'1px solid #fff', background:'transparent', color:'#fff', fontSize:16, cursor: loading?'not-allowed':'pointer' }}>
-        {loading ? 'Сохранение...' : 'Создать'}
-      </button>
+      <div style={{ display:'flex', gap: 12, alignItems: 'center' }}>
+        <button onClick={handleSubmit} disabled={loading}
+          style={{
+            padding:'10px 20px',
+            borderRadius:10,
+            border:'none',
+            background: loading ? '#4b3b7d' : 'linear-gradient(180deg,#6c56ff,#5846d8)',
+            color:'#fff',
+            fontSize:16,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: 800,
+            boxShadow: '0 6px 18px rgba(88,70,216,0.18)'
+          }}>
+          {loading ? 'Сохранение...' : 'Создать'}
+        </button>
+
+        <button type="button"
+          onClick={() => { setTitle(''); setQuestion(''); setOptions(['','']); setFile(null); setSelectedTopicId(topics[0]?.id ?? '') }}
+          style={{
+            padding:'10px 14px',
+            borderRadius:10,
+            background:'#111',
+            color:'#fff',
+            border:'1px solid rgba(255,255,255,0.04)',
+            cursor:'pointer'
+          }}>
+          Сбросить
+        </button>
+      </div>
     </div>
   )
 }

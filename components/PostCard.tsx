@@ -15,23 +15,18 @@ export type PostCardProps = {
   pollOptions?: PollOption[];
   className?: string;
   collapsedOverlayRatio?: number;
-  /**
-   * onVote(postId, optionId) -> optional:
-   * - can return void
-   * - or return countsMap (Record<optionId, count>)
-   * - or return { countsMap?, myVote? } where myVote is optionId or null
-   */
   onVote?: (
     postId: string,
-    optionId: string
+    optionId: string | null
   ) => Promise<
     | { countsMap?: Record<string, number>; myVote?: string | null }
     | Record<string, number>
     | void
   >
   | void;
-  initialVote?: string | null; // if feed passes initial user's vote
+  initialVote?: string | null;
   onCommentClick?: (postId: string) => void;
+  pending?: boolean;
 };
 
 export default function PostCard({
@@ -47,13 +42,12 @@ export default function PostCard({
   onVote,
   onCommentClick,
   initialVote = null,
+  pending: pendingProp = false,
 }: PostCardProps) {
-  // UI states
   const [expanded, setExpanded] = useState(false);
   const [votedOption, setVotedOption] = useState<string | null>(initialVote ?? null);
-  const [pending, setPending] = useState(false);
+  const [localPending, setLocalPending] = useState(false);
 
-  // compute counts map from props
   const computeInitialCounts = (opts: PollOption[]) => {
     const acc: Record<string, number> = {};
     opts.forEach((o) => (acc[o.id] = Number(o.votes ?? 0)));
@@ -63,17 +57,15 @@ export default function PostCard({
   const initialCounts = useMemo(() => computeInitialCounts(pollOptions), [JSON.stringify(pollOptions)]);
   const [localCounts, setLocalCounts] = useState<Record<string, number>>(initialCounts);
 
-  // sync localCounts if pollOptions change (server refresh)
   useEffect(() => {
     setLocalCounts(computeInitialCounts(pollOptions));
   }, [JSON.stringify(pollOptions)]);
 
   useEffect(() => {
     if (typeof initialVote !== 'undefined') {
-      setVotedOption(initialVote ?? null)
+      setVotedOption(initialVote ?? null);
     }
-  }, [initialVote])
-
+  }, [initialVote]);
 
   const totalVotes = useMemo(() => Object.values(localCounts).reduce((s, v) => s + (v || 0), 0), [localCounts]);
 
@@ -82,56 +74,70 @@ export default function PostCard({
 
   const handleToggle = () => setExpanded((s) => !s);
 
-  /**
-   * Core vote handler:
-   * - single vote behavior: if already voted, block further clicks
-   * - optimistic increment locally and set votedOption
-   * - call onVote; if onVote returns authoritative countsMap, apply it
-   * - do NOT clear votedOption unless server explicitly returns myVote === null
-   */
+  const isPending = pendingProp || localPending;
+
   const handleVoteClick = async (optionId: string) => {
     await logDebug('PostCard.voteClick', { postId: id, optionId })
+
     if (!onVote) {
-      // no backend hook - still perform local optimistic update so UX works
-      if (!votedOption) {
-        setLocalCounts((prev) => ({ ...prev, [optionId]: (prev[optionId] || 0) + 1 }));
+      const currentlyVoted = votedOption;
+      if (currentlyVoted === optionId) {
+        setLocalCounts((prev) => ({ ...prev, [optionId]: Math.max((prev[optionId] || 1) - 1, 0) }));
+        setVotedOption(null);
+      } else {
+        setLocalCounts((prev) => {
+          const next = { ...prev };
+          if (currentlyVoted) next[currentlyVoted] = Math.max((next[currentlyVoted] || 1) - 1, 0);
+          next[optionId] = (next[optionId] || 0) + 1;
+          return next;
+        });
         setVotedOption(optionId);
       }
       return;
     }
 
-    if (pending) return;
-    if (votedOption) {
-      // already voted; single-vote mode for now
-      console.debug("[PostCard] vote ignored — already voted", votedOption);
+    if (isPending) {
+      console.debug("[PostCard] vote ignored — pending", { postId: id });
       return;
     }
 
-    setPending(true);
-    console.log("[PostCard] vote click", { postId: id, optionId });
+    const currentlyVoted = votedOption;
+    const willUnvote = currentlyVoted === optionId;
+    const targetOptionId = willUnvote ? null : optionId;
 
-    // optimistic update
-    setLocalCounts((prev) => ({ ...prev, [optionId]: (prev[optionId] || 0) + 1 }));
-    setVotedOption(optionId);
+    setLocalPending(true);
+    await logDebug('PostCard.voteStart', { postId: id, optionId: targetOptionId });
+
+    setLocalCounts((prev) => {
+      const next = { ...prev };
+      if (currentlyVoted && currentlyVoted !== optionId) {
+        next[currentlyVoted] = Math.max((next[currentlyVoted] || 1) - 1, 0);
+      }
+      if (!willUnvote) {
+        next[optionId] = (next[optionId] || 0) + 1;
+      } else {
+        next[optionId] = Math.max((next[optionId] || 1) - 1, 0);
+      }
+      return next;
+    });
+
+    setVotedOption(targetOptionId);
 
     try {
-      const res = await onVote(id, optionId);
+      const res = await onVote(id, targetOptionId);
 
-      // normalize response
       let countsMap: Record<string, number> | undefined = undefined;
       let myVote: string | null | undefined = undefined;
 
       if (res && typeof res === "object") {
-        if ((res as any).countsMap !== undefined) {
+        if ((res as any).countsMap !== undefined || (res as any).myVote !== undefined) {
           countsMap = (res as any).countsMap;
           myVote = (res as any).myVote;
         } else {
-          // feed might return countsMap directly
           countsMap = res as Record<string, number>;
         }
       }
 
-      // apply server counts if present (authoritative)
       if (countsMap && typeof countsMap === "object") {
         setLocalCounts((prev) => {
           const next = { ...prev };
@@ -140,25 +146,28 @@ export default function PostCard({
         });
       }
 
-      // only override votedOption if server explicitly returns myVote (including null)
       if (typeof myVote !== "undefined") {
         setVotedOption(myVote ?? null);
-      } else {
-        // keep optimistic votedOption (do nothing)
       }
 
-      console.log("[PostCard] vote success", { countsMap, myVote });
+      await logDebug('PostCard.voteOk', { postId: id, countsMap, myVote });
+      console.log("[PostCard] vote success", { postId: id, countsMap, myVote });
     } catch (err) {
       console.error("[PostCard] vote failed, rolling back optimistic update", err);
-      // rollback optimistic
       setLocalCounts((prev) => {
         const next = { ...prev };
-        next[optionId] = Math.max((next[optionId] || 1) - 1, 0);
+        if (willUnvote) {
+          next[optionId] = (next[optionId] || 0) + 1;
+        } else {
+          next[optionId] = Math.max((next[optionId] || 1) - 1, 0);
+          if (currentlyVoted) next[currentlyVoted] = (next[currentlyVoted] || 0) + 1;
+        }
         return next;
       });
-      setVotedOption(null);
+      setVotedOption(currentlyVoted ?? null);
+      await logDebug('PostCard.voteError', { postId: id, optionId, error: String(err) });
     } finally {
-      setPending(false);
+      setLocalPending(false);
     }
   };
 
@@ -195,7 +204,8 @@ export default function PostCard({
             <h3 id={`post-${id}-title`} className="title">{title}</h3>
 
             <div className="body">
-              <p className="content" id={`post-${id}-content`} aria-expanded={expanded}>{content}</p>
+              {/* FIX: preserve user line breaks and spaces */}
+              <p className="content" id={`post-${id}-content`} aria-expanded={expanded} >{content}</p>
 
               <div className={`poll-panel ${expanded ? "open" : "closed"}`} aria-hidden={!expanded && !shouldShowToggle}>
                 <div className="poll-panel-inner">
@@ -209,7 +219,7 @@ export default function PostCard({
                           <button
                             className={`poll-btn ${voted ? "voted" : ""}`}
                             onClick={() => handleVoteClick(opt.id)}
-                            disabled={pending || !!votedOption}
+                            disabled={isPending}
                             aria-pressed={voted}
                             title={voted ? "Вы проголосовали" : "Проголосовать"}
                           >
@@ -248,7 +258,7 @@ export default function PostCard({
           </footer>
 
           {shouldShowToggle && (
-            <button className="toggle" onClick={handleToggle} aria-expanded={expanded} aria-controls={`post-${id}-content`} disabled={pending}>
+            <button className="toggle" onClick={handleToggle} aria-expanded={expanded} aria-controls={`post-${id}-content`} disabled={isPending}>
               <svg className="chev" width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                 <path d="M1 1L7 7L13 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -289,18 +299,58 @@ export default function PostCard({
           border-top-right-radius: 16px;
           transition: top 420ms cubic-bezier(0.22,1,0.36,1), background 220ms;
           pointer-events: auto;
+
+          display: flex;               /* FIX: make text-bg a column so inner can scroll */
+          flex-direction: column;
         }
         .expanded .text-bg { top: 12px; background: rgba(0,0,0,0.78); }
 
-        .text-inner { padding: 18px 18px 76px 18px; color: #fff; text-shadow: 0 3px 10px rgba(0,0,0,0.6); position: relative; }
+        /* FIX: make inner area scrollable when content tall */
+        .text-inner {
+          padding: 18px 18px 76px 18px;
+          color: #fff;
+          text-shadow: 0 3px 10px rgba(0,0,0,0.6);
+          position: relative;
+
+          /* limit height so it never overflows viewport; allow vertical scroll */
+          max-height: calc(100vh - 120px);
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .expanded .text-inner { max-height: calc(100vh - 40px); } /* when expanded allow more space */
 
         .meta { display: flex; gap: 8px; align-items: center; font-size: 13px; color: rgba(255,255,255,0.95); }
         .topic { background: rgba(255,255,255,0.06); padding: 4px 8px; border-radius: 999px; font-weight: 700; font-size: 13px; }
         .title { margin: 6px 0 0 0; font-size: 20px; font-weight: 800; }
         .body { margin-top: 8px; }
-        .content { margin: 6px 0 0 0; color: rgba(255,255,255,0.96); font-size: 15px; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
-        .collapsed .content { -webkit-line-clamp: 3; max-height: 4.6em; }
-        .expanded .content { -webkit-line-clamp: unset; max-height: none; }
+
+        /* FIX: preserve line breaks and allow wrapping; keep collapsed previews tidy */
+        .content {
+          margin: 6px 0 0 0;
+          color: rgba(255,255,255,0.96);
+          font-size: 15px;
+          line-height: 1.45;
+
+          /* preserve user formatting (newlines) */
+          white-space: pre-wrap;      /* FIX: keep user line breaks and spacing */
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          hyphens: auto;
+          box-sizing: border-box;
+        }
+        .collapsed .content { 
+          /* show preview with clamp; keep visual multiline clamp */
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
+          max-height: 4.6em;
+        }
+        .expanded .content { 
+          /* expanded shows full content inside the scrollable text-inner */
+          display: block;
+          max-height: none;
+        }
 
         .poll-panel { margin-top: 12px; width: 100%; display: block; }
         .poll-panel-inner {
@@ -308,8 +358,12 @@ export default function PostCard({
           border-radius: 14px;
           padding: 14px;
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+
+          /* FIX: allow poll inner to scroll when many options */
+          max-height: 240px;
+          overflow-y: auto;
         }
-        .expanded .poll-panel-inner { background: rgba(8,8,10,0.72); }
+        .expanded .poll-panel-inner { background: rgba(8,8,10,0.72); max-height: 380px; }
 
         .poll { display: flex; flex-direction: column; gap: 10px; transition: all .26s ease; }
         .poll.hidden { opacity:0; height:0; overflow:hidden; pointer-events:none; transform:translateY(6px); }

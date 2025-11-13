@@ -3,5 +3,6 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/feed": "pages/feed.js",
-  "/news": "pages/news.js"
+  "/news": "pages/news.js",
+  "/profile": "pages/profile.js"
 }
