@@ -189,7 +189,6 @@ function ChatPage() {
   const router = useRouter()
 
   const [tgId, setTgId] = useState<string>('')
-  const isAdmin = ADMINS.includes(tgId);
   
   const [points, setPoints] = useState<number>(0)
   const [hasNFT, setHasNFT] = useState<boolean>(false)
