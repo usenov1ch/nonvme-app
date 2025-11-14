@@ -212,10 +212,10 @@ function ChatPage() {
 
   const isAdmin = ADMINS.includes(tgId)
   const quota = useMemo(() => {
-    if (isAdmin) return Infinity
+    if (isAdmin) return ∞
     return calcQuota(points, hasNFT)
   }, [points, hasNFT, tgId])
-  const remaining = isAdmin ? Infinity : Math.max(quota - usedToday, 0)
+  const remaining = isAdmin ? ∞ : Math.max(quota - usedToday, 0)
 
 
   useEffect(() => {
