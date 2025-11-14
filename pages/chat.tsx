@@ -189,7 +189,8 @@ function ChatPage() {
   const router = useRouter()
 
   const [tgId, setTgId] = useState<string>('')
-
+  const isAdmin = ADMINS.includes(tgId);
+  
   const [points, setPoints] = useState<number>(0)
   const [hasNFT, setHasNFT] = useState<boolean>(false)
   const [eligible, setEligible] = useState<boolean>(false)
@@ -212,10 +213,10 @@ function ChatPage() {
 
   const isAdmin = ADMINS.includes(tgId)
   const quota = useMemo(() => {
-    if (isAdmin) return ∞
+    if (isAdmin) return infinity
     return calcQuota(points, hasNFT)
   }, [points, hasNFT, tgId])
-  const remaining = isAdmin ? ∞ : Math.max(quota - usedToday, 0)
+  const remaining = isAdmin ? infinity : Math.max(quota - usedToday, 0)
 
 
   useEffect(() => {
@@ -485,8 +486,9 @@ function ChatPage() {
       </div>
 
       <div style={{ fontSize:12, opacity:.85, marginBottom:12 }}>
-        Баллы: <b>{points}</b> · NFT: <b>{hasNFT ? 'да' : 'нет'}</b> · лимит/день: <b>{quota}</b> · осталось: <b>{remaining}</b>
+        Баллы: <b>{points}</b> · NFT: <b>{hasNFT ? 'да' : 'нет'}</b> · лимит/день: <b>{isAdmin ? '∞' : quota}</b> · осталось: <b>{isAdmin ? '∞' : remaining}</b>
       </div>
+
 
       <div
         ref={listRef}
