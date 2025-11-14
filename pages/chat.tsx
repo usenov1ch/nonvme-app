@@ -15,6 +15,8 @@ type ChatRow = {
   users?: { nonvme?: string | null, avatar_url?: string | null } | null
 }
 
+const ADMINS = ["697492345", "6102702406"]
+
 const LEVEL_THRESHOLD = 50
 const QUOTA_BASE = { none: 0, low: 5, mid: 10, high: 20, nft: 50 }
 
@@ -208,8 +210,13 @@ function ChatPage() {
     if (u?.id) setTgId(String(u.id))
   }, [])
 
-  const quota = useMemo(() => calcQuota(points, hasNFT), [points, hasNFT])
-  const remaining = Math.max(quota - usedToday, 0)
+  const isAdmin = ADMINS.includes(tgId)
+  const quota = useMemo(() => {
+    if (isAdmin) return Infinity
+    return calcQuota(points, hasNFT)
+  }, [points, hasNFT, tgId])
+  const remaining = isAdmin ? Infinity : Math.max(quota - usedToday, 0)
+
 
   useEffect(() => {
     if (!tgId) return
@@ -232,7 +239,8 @@ function ChatPage() {
         if (!cancel) {
           setPoints(pts)
           setHasNFT(!!nh)
-          setEligible(pts >= LEVEL_THRESHOLD || !!nh)
+          const isAdmin = ADMINS.includes(tgId)
+          setEligible(isAdmin || pts >= LEVEL_THRESHOLD || !!nh)
         }
 
         const startOfDay = new Date()
@@ -371,7 +379,10 @@ function ChatPage() {
       setError('')
       if (!tgId) { setError('Откройте мини-апп из Telegram'); return }
       if (!eligible) { setError('Недостаточно уровня для отправки'); return }
-      if (remaining <= 0) { setError('Лимит сообщений на сегодня исчерпан'); return }
+      if (!isAdmin && remaining <= 0) {
+        setError('Лимит сообщений на сегодня исчерпан');
+        return;
+      }
       const body = text.trim()
       if (!body) return
       setSending(true)
