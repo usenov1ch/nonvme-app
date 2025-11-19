@@ -4,7 +4,6 @@ import type { AppProps } from "next/app";
 import { supabase } from "../lib/supabase";
 import Maintenance from "../components/Maintenance";
 
-declare global { interface Window { Telegram?: any } }
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   const [allowed, setAllowed] = useState<boolean | null>(null); // null = loading
