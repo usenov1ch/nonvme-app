@@ -83,8 +83,17 @@ export default function MyApp({ Component, pageProps }: AppProps) {
 
   // Если не разрешён — показываем заглушку
   if (!allowed) {
-    return <Maintenance />;
-  }
+  return (
+    <Maintenance
+      launchAt="2026-02-20T00:00:00+05:00"
+      assets={{
+        backgroundUrl: "/assets/back.png",
+        logoUrl: "/assets/logo.png",
+      }}
+    />
+  );
+}
+
 
   // Разрешён — рендерим приложение как обычно
   return <Component {...pageProps} />;
